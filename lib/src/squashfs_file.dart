@@ -176,18 +176,21 @@ class SquashfsFile {
   Future<Uint8List> _readMetadata(
       RandomAccessFile file, int start, int end) async {
     var builder = BytesBuilder();
+    await file.setPosition(start);
     var offset = start;
     while (offset < end) {
-      await file.setPosition(offset);
       var blockLength =
           ByteData.sublistView(await file.read(2)).getUint16(0, _endian);
-      var data = await file.read(blockLength & 0x7fff);
-      if (blockLength & 0x8000 == 0) {
+      var compressed = blockLength & 0x8000 == 0;
+      blockLength &= 0x7fff;
+
+      var data = await file.read(blockLength);
+      if (compressed) {
         builder.add(_decompress(data));
       } else {
         builder.add(data);
       }
-      offset += 2 + blockLength & 0x7fff;
+      offset += 2 + blockLength;
     }
     return builder.takeBytes();
   }
@@ -289,18 +292,19 @@ class SquashfsFile {
     var offset = 0;
     while (start + offset < end) {
       var count = buffer.getUint32(offset + 0, _endian) + 1;
-      var inodeStart = buffer.getUint32(offset + 4, _endian);
-      var inodeNumber = buffer.getUint32(offset + 8, _endian);
+      /*var inodeOffsetBase = */ buffer.getUint32(offset + 4, _endian);
+      var inodeNumberBase = buffer.getUint32(offset + 8, _endian);
       offset += 12;
       for (var i = 0; i < count; i++) {
-        buffer.getUint16(offset + 0, _endian);
-        var inodeOffset = buffer.getInt16(offset + 2, _endian);
+        /*var inodeOffset = */ buffer.getUint16(offset + 0, _endian);
+        var inodeNumberOffset = buffer.getInt16(offset + 2, _endian);
         var type = buffer.getUint16(offset + 4, _endian);
         var nameSize = buffer.getUint16(offset + 6, _endian) + 1;
         var name = utf8.decode(data.sublist(offset + 8, offset + 8 + nameSize));
         offset += 8 + nameSize;
+
         entries.add(SquashfsDirectoryEntry(
-            inodeNumber: inodeNumber + inodeOffset, name: name));
+            inodeNumber: inodeNumberBase + inodeNumberOffset, name: name));
       }
     }
 
