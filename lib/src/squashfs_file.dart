@@ -34,11 +34,14 @@ class SquashfsBasicDirectoryInode extends SquashfsInode {
 }
 
 class SquashfsBasicFileInode extends SquashfsInode {
+  final int fileSize;
+
   SquashfsBasicFileInode(
       {required int uidIndex,
       required int gidIndex,
       required int modifiedTime,
-      required int inodeNumber})
+      required int inodeNumber,
+      required this.fileSize})
       : super(
             uidIndex: uidIndex,
             gidIndex: gidIndex,
@@ -46,15 +49,18 @@ class SquashfsBasicFileInode extends SquashfsInode {
             inodeNumber: inodeNumber);
 
   @override
-  String toString() => 'SquashfsBasicFileInode()';
+  String toString() => 'SquashfsBasicFileInode(fileSize: $fileSize)';
 }
 
 class SquashfsBasicSymlinkInode extends SquashfsInode {
+  final String targetPath;
+
   SquashfsBasicSymlinkInode(
       {required int uidIndex,
       required int gidIndex,
       required int modifiedTime,
-      required int inodeNumber})
+      required int inodeNumber,
+      required this.targetPath})
       : super(
             uidIndex: uidIndex,
             gidIndex: gidIndex,
@@ -62,7 +68,7 @@ class SquashfsBasicSymlinkInode extends SquashfsInode {
             inodeNumber: inodeNumber);
 
   @override
-  String toString() => 'SquashfsBasicSymlinkInode()';
+  String toString() => 'SquashfsBasicSymlinkInode(targetPath: $targetPath)';
 }
 
 class SquashfsDirectoryEntry {
@@ -84,6 +90,9 @@ class SquashfsFile {
 
   late final List<SquashfsInode> _inodes;
   late final List<SquashfsDirectoryEntry> _directoryEntries;
+
+  List<SquashfsInode> get inodes => _inodes;
+  List<SquashfsDirectoryEntry> get directoryEntries => _directoryEntries;
 
   SquashfsFile(String filename) : _file = File(filename);
 
@@ -127,15 +136,14 @@ class SquashfsFile {
     var fragmentTableStart = buffer.getUint64(80, _endian);
     var exportTableStart = buffer.getUint64(88, _endian);
 
-    print('version = $versionMajor.$versionMinor');
-    print('compression = $_compression');
-    print('flags = ${_flags.toRadixString(2)}');
+    if (versionMajor != 4) {
+      throw 'Unsupported squashfs version $versionMajor.$versionMinor';
+    }
 
     _inodes = await _readInodeTable(
         file, inodeTableStart, directoryTableStart, inodeCount);
     _directoryEntries = await _readDirectoryTable(
         file, directoryTableStart, fragmentTableStart);
-    print(_directoryEntries);
 
     file.close();
   }
@@ -216,7 +224,21 @@ class SquashfsFile {
               uidIndex: uidIndex,
               gidIndex: gidIndex,
               modifiedTime: modifiedTime,
-              inodeNumber: inodeNumber));
+              inodeNumber: inodeNumber,
+              fileSize: fileSize));
+          break;
+        case 3: // Basic Symlink
+          var hardLinkCount = buffer.getUint32(offset + 0, _endian);
+          var targetSize = buffer.getUint32(offset + 4, _endian);
+          var targetPath =
+              utf8.decode(data.sublist(offset + 8, offset + 8 + targetSize));
+          offset += 8 + targetSize;
+          inodes.add(SquashfsBasicSymlinkInode(
+              uidIndex: uidIndex,
+              gidIndex: gidIndex,
+              modifiedTime: modifiedTime,
+              inodeNumber: inodeNumber,
+              targetPath: targetPath));
           break;
         default:
           throw 'Unknown inode type $inodeType';
@@ -233,18 +255,21 @@ class SquashfsFile {
     var data = await _readMetadata(file, start, end);
     var buffer = ByteData.sublistView(data);
 
-    var count = buffer.getUint32(0, _endian) + 1;
-    var inodeStart = buffer.getUint32(4, _endian);
-    var inodeNumber = buffer.getUint32(8, _endian);
-    var offset = 12;
-    for (var i = 0; i < count; i++) {
-      buffer.getUint16(offset + 0, _endian);
-      buffer.getInt16(offset + 2, _endian);
-      var type = buffer.getUint16(offset + 4, _endian);
-      var nameSize = buffer.getUint16(offset + 6, _endian) + 1;
-      var name = utf8.decode(data.sublist(offset + 8, offset + 8 + nameSize));
-      offset += 8 + nameSize;
-      entries.add(SquashfsDirectoryEntry(name: name));
+    var offset = 0;
+    while (start + offset < end) {
+      var count = buffer.getUint32(offset + 0, _endian) + 1;
+      var inodeStart = buffer.getUint32(offset + 4, _endian);
+      var inodeNumber = buffer.getUint32(offset + 8, _endian);
+      offset += 12;
+      for (var i = 0; i < count; i++) {
+        buffer.getUint16(offset + 0, _endian);
+        buffer.getInt16(offset + 2, _endian);
+        var type = buffer.getUint16(offset + 4, _endian);
+        var nameSize = buffer.getUint16(offset + 6, _endian) + 1;
+        var name = utf8.decode(data.sublist(offset + 8, offset + 8 + nameSize));
+        offset += 8 + nameSize;
+        entries.add(SquashfsDirectoryEntry(name: name));
+      }
     }
 
     return entries;
