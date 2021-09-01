@@ -4,6 +4,23 @@ import 'dart:typed_data';
 
 enum SquashFsCompression { none, gzip, lzma, lzo, xz, lz4, zstd }
 
+enum SquashfsInodeType {
+  basicDirectory,
+  basicFile,
+  basicSymlink,
+  basicBlockDevice,
+  basicCharDevice,
+  basicFifo,
+  basicSocket,
+  extendedDirectory,
+  extendedFile,
+  extendedSymlink,
+  extendedBlockDevice,
+  extendedCharDevice,
+  extendedFifo,
+  extendedSocket
+}
+
 abstract class SquashfsInode {
   final int uidIndex;
   final int gidIndex;
@@ -191,7 +208,7 @@ class SquashfsFile {
 
     var offset = 0;
     for (var i = 0; i < inodeCount; i++) {
-      var inodeType = buffer.getUint16(offset + 0, _endian);
+      var inodeTypeId = buffer.getUint16(offset + 0, _endian);
       var permissions = buffer.getUint16(offset + 2, _endian);
       var uidIndex = buffer.getUint16(offset + 4, _endian);
       var gidIndex = buffer.getUint16(offset + 6, _endian);
@@ -199,8 +216,13 @@ class SquashfsFile {
       var inodeNumber = buffer.getUint32(offset + 12, _endian);
       offset += 16;
 
+      if (inodeTypeId == 0 || inodeTypeId > SquashfsInodeType.values.length) {
+        throw 'Unknown inode type $inodeTypeId';
+      }
+      var inodeType = SquashfsInodeType.values[inodeTypeId - 1];
+
       switch (inodeType) {
-        case 1: // Basic Directory
+        case SquashfsInodeType.basicDirectory:
           var dirBlockStart = buffer.getUint32(offset + 0, _endian);
           var hardLinkCount = buffer.getUint32(offset + 4, _endian);
           var fileSize = buffer.getUint16(offset + 8, _endian);
@@ -214,7 +236,7 @@ class SquashfsFile {
               inodeNumber: inodeNumber,
               parentInodeNumber: parentInodeNumber));
           break;
-        case 2: // Basic File
+        case SquashfsInodeType.basicFile:
           var blocksStart = buffer.getUint32(offset + 0, _endian);
           var fragmentBlockIndex = buffer.getUint32(offset + 4, _endian);
           var blockOffset = buffer.getUint32(offset + 8, _endian);
@@ -234,7 +256,7 @@ class SquashfsFile {
               inodeNumber: inodeNumber,
               fileSize: fileSize));
           break;
-        case 3: // Basic Symlink
+        case SquashfsInodeType.basicSymlink:
           var hardLinkCount = buffer.getUint32(offset + 0, _endian);
           var targetSize = buffer.getUint32(offset + 4, _endian);
           var targetPath =
