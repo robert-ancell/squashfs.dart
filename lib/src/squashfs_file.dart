@@ -62,12 +62,6 @@ class SquashfsFile {
   late final int _blockSize;
   late final SquashFsCompression _compression;
   late final int _flags;
-  late final int _idTableStart;
-  late final int _xattrIdTableStart;
-  late final int _inodeTableStart;
-  late final int _directoryTableStart;
-  late final int _fragmentTableStart;
-  late final int _exportTableStart;
 
   late final List<SquashfsInode> _inodes;
 
@@ -106,18 +100,19 @@ class SquashfsFile {
     var versionMinor = buffer.getUint16(30, _endian);
     var rootInodeRef = buffer.getUint64(32, _endian);
     var bytesUsed = buffer.getUint64(40, _endian);
-    _idTableStart = buffer.getUint64(48, _endian);
-    _xattrIdTableStart = buffer.getUint64(56, _endian);
-    _inodeTableStart = buffer.getUint64(64, _endian);
-    _directoryTableStart = buffer.getUint64(72, _endian);
-    _fragmentTableStart = buffer.getUint64(80, _endian);
-    _exportTableStart = buffer.getUint64(88, _endian);
+    var idTableStart = buffer.getUint64(48, _endian);
+    var xattrIdTableStart = buffer.getUint64(56, _endian);
+    var inodeTableStart = buffer.getUint64(64, _endian);
+    var directoryTableStart = buffer.getUint64(72, _endian);
+    var fragmentTableStart = buffer.getUint64(80, _endian);
+    var exportTableStart = buffer.getUint64(88, _endian);
 
     print('version = $versionMajor.$versionMinor');
     print('compression = $_compression');
     print('flags = ${_flags.toRadixString(2)}');
 
-    _inodes = await _readInodeTable(file, inodeCount);
+    _inodes = await _readInodeTable(
+        file, inodeTableStart, directoryTableStart, inodeCount);
     print(_inodes);
 
     file.close();
@@ -152,11 +147,10 @@ class SquashfsFile {
   }
 
   Future<List<SquashfsInode>> _readInodeTable(
-      RandomAccessFile file, int inodeCount) async {
+      RandomAccessFile file, int start, int end, int inodeCount) async {
     var inodes = <SquashfsInode>[];
 
-    var data =
-        await _readMetadata(file, _inodeTableStart, _directoryTableStart);
+    var data = await _readMetadata(file, start, end);
     var buffer = ByteData.sublistView(data);
 
     var offset = 0;
