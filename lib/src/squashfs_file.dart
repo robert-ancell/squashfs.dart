@@ -95,12 +95,14 @@ class SquashfsBasicSymlinkInode extends SquashfsInode {
 }
 
 class SquashfsDirectoryEntry {
+  final int inodeNumber;
   final String name;
 
-  SquashfsDirectoryEntry({required this.name});
+  SquashfsDirectoryEntry({required this.inodeNumber, required this.name});
 
   @override
-  String toString() => 'SquashfsDirectoryEntry(name: $name)';
+  String toString() =>
+      'SquashfsDirectoryEntry(inodeNumber: $inodeNumber, name: $name)';
 }
 
 class SquashfsFile {
@@ -292,12 +294,13 @@ class SquashfsFile {
       offset += 12;
       for (var i = 0; i < count; i++) {
         buffer.getUint16(offset + 0, _endian);
-        buffer.getInt16(offset + 2, _endian);
+        var inodeOffset = buffer.getInt16(offset + 2, _endian);
         var type = buffer.getUint16(offset + 4, _endian);
         var nameSize = buffer.getUint16(offset + 6, _endian) + 1;
         var name = utf8.decode(data.sublist(offset + 8, offset + 8 + nameSize));
         offset += 8 + nameSize;
-        entries.add(SquashfsDirectoryEntry(name: name));
+        entries.add(SquashfsDirectoryEntry(
+            inodeNumber: inodeNumber + inodeOffset, name: name));
       }
     }
 
