@@ -1,58 +1,77 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 enum SquashFsCompression { none, gzip, lzma, lzo, xz, lz4, zstd }
 
 class SquashfsInode {
-  final int uidIdx;
-  final int gidIdx;
+  final int uidIndex;
+  final int gidIndex;
   final int modifiedTime;
   final int inodeNumber;
 
   SquashfsInode(
-      {required this.uidIdx,
-      required this.gidIdx,
+      {required this.uidIndex,
+      required this.gidIndex,
       required this.modifiedTime,
       required this.inodeNumber});
 }
 
 class SquashfsBasicDirectoryInode extends SquashfsInode {
   SquashfsBasicDirectoryInode(
-      {required int uidIdx,
-      required int gidIdx,
+      {required int uidIndex,
+      required int gidIndex,
       required int modifiedTime,
       required int inodeNumber})
       : super(
-            uidIdx: uidIdx,
-            gidIdx: gidIdx,
+            uidIndex: uidIndex,
+            gidIndex: gidIndex,
             modifiedTime: modifiedTime,
             inodeNumber: inodeNumber);
+
+  @override
+  String toString() => 'SquashfsBasicDirectoryInode()';
 }
 
 class SquashfsBasicFileInode extends SquashfsInode {
   SquashfsBasicFileInode(
-      {required int uidIdx,
-      required int gidIdx,
+      {required int uidIndex,
+      required int gidIndex,
       required int modifiedTime,
       required int inodeNumber})
       : super(
-            uidIdx: uidIdx,
-            gidIdx: gidIdx,
+            uidIndex: uidIndex,
+            gidIndex: gidIndex,
             modifiedTime: modifiedTime,
             inodeNumber: inodeNumber);
+
+  @override
+  String toString() => 'SquashfsBasicFileInode()';
 }
 
 class SquashfsBasicSymlinkInode extends SquashfsInode {
   SquashfsBasicSymlinkInode(
-      {required int uidIdx,
-      required int gidIdx,
+      {required int uidIndex,
+      required int gidIndex,
       required int modifiedTime,
       required int inodeNumber})
       : super(
-            uidIdx: uidIdx,
-            gidIdx: gidIdx,
+            uidIndex: uidIndex,
+            gidIndex: gidIndex,
             modifiedTime: modifiedTime,
             inodeNumber: inodeNumber);
+
+  @override
+  String toString() => 'SquashfsBasicSymlinkInode()';
+}
+
+class SquashfsDirectoryEntry {
+  final String name;
+
+  SquashfsDirectoryEntry({required this.name});
+
+  @override
+  String toString() => 'SquashfsDirectoryEntry(name: $name)';
 }
 
 class SquashfsFile {
@@ -64,6 +83,7 @@ class SquashfsFile {
   late final int _flags;
 
   late final List<SquashfsInode> _inodes;
+  late final List<SquashfsDirectoryEntry> _directoryEntries;
 
   SquashfsFile(String filename) : _file = File(filename);
 
@@ -113,7 +133,9 @@ class SquashfsFile {
 
     _inodes = await _readInodeTable(
         file, inodeTableStart, directoryTableStart, inodeCount);
-    print(_inodes);
+    _directoryEntries = await _readDirectoryTable(
+        file, directoryTableStart, fragmentTableStart);
+    print(_directoryEntries);
 
     file.close();
   }
@@ -157,8 +179,8 @@ class SquashfsFile {
     for (var i = 0; i < inodeCount; i++) {
       var inodeType = buffer.getUint16(offset + 0, _endian);
       var permissions = buffer.getUint16(offset + 2, _endian);
-      var uidIdx = buffer.getUint16(offset + 4, _endian);
-      var gidIdx = buffer.getUint16(offset + 6, _endian);
+      var uidIndex = buffer.getUint16(offset + 4, _endian);
+      var gidIndex = buffer.getUint16(offset + 6, _endian);
       var modifiedTime = buffer.getUint32(offset + 8, _endian);
       var inodeNumber = buffer.getUint32(offset + 12, _endian);
       offset += 16;
@@ -172,8 +194,8 @@ class SquashfsFile {
           var parentInodeNumber = buffer.getUint32(offset + 12, _endian);
           offset += 16;
           inodes.add(SquashfsBasicDirectoryInode(
-              uidIdx: uidIdx,
-              gidIdx: gidIdx,
+              uidIndex: uidIndex,
+              gidIndex: gidIndex,
               modifiedTime: modifiedTime,
               inodeNumber: inodeNumber));
           break;
@@ -191,8 +213,8 @@ class SquashfsFile {
             offset += 4;
           }
           inodes.add(SquashfsBasicFileInode(
-              uidIdx: uidIdx,
-              gidIdx: gidIdx,
+              uidIndex: uidIndex,
+              gidIndex: gidIndex,
               modifiedTime: modifiedTime,
               inodeNumber: inodeNumber));
           break;
@@ -202,5 +224,29 @@ class SquashfsFile {
     }
 
     return inodes;
+  }
+
+  Future<List<SquashfsDirectoryEntry>> _readDirectoryTable(
+      RandomAccessFile file, int start, int end) async {
+    var entries = <SquashfsDirectoryEntry>[];
+
+    var data = await _readMetadata(file, start, end);
+    var buffer = ByteData.sublistView(data);
+
+    var count = buffer.getUint32(0, _endian) + 1;
+    var inodeStart = buffer.getUint32(4, _endian);
+    var inodeNumber = buffer.getUint32(8, _endian);
+    var offset = 12;
+    for (var i = 0; i < count; i++) {
+      buffer.getUint16(offset + 0, _endian);
+      buffer.getInt16(offset + 2, _endian);
+      var type = buffer.getUint16(offset + 4, _endian);
+      var nameSize = buffer.getUint16(offset + 6, _endian) + 1;
+      var name = utf8.decode(data.sublist(offset + 8, offset + 8 + nameSize));
+      offset += 8 + nameSize;
+      entries.add(SquashfsDirectoryEntry(name: name));
+    }
+
+    return entries;
   }
 }
