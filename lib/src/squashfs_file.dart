@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 enum SquashFsCompression { none, gzip, lzma, lzo, xz, lz4, zstd }
 
-class SquashfsInode {
+abstract class SquashfsInode {
   final int uidIndex;
   final int gidIndex;
   final int modifiedTime;
