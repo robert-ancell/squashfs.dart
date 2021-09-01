@@ -18,11 +18,14 @@ abstract class SquashfsInode {
 }
 
 class SquashfsBasicDirectoryInode extends SquashfsInode {
+  final int parentInodeNumber;
+
   SquashfsBasicDirectoryInode(
       {required int uidIndex,
       required int gidIndex,
       required int modifiedTime,
-      required int inodeNumber})
+      required int inodeNumber,
+      required this.parentInodeNumber})
       : super(
             uidIndex: uidIndex,
             gidIndex: gidIndex,
@@ -30,7 +33,8 @@ class SquashfsBasicDirectoryInode extends SquashfsInode {
             inodeNumber: inodeNumber);
 
   @override
-  String toString() => 'SquashfsBasicDirectoryInode()';
+  String toString() =>
+      'SquashfsBasicDirectoryInode(inodeNumber: $inodeNumber, parentInodeNumber: $parentInodeNumber)';
 }
 
 class SquashfsBasicFileInode extends SquashfsInode {
@@ -49,7 +53,8 @@ class SquashfsBasicFileInode extends SquashfsInode {
             inodeNumber: inodeNumber);
 
   @override
-  String toString() => 'SquashfsBasicFileInode(fileSize: $fileSize)';
+  String toString() =>
+      'SquashfsBasicFileInode(inodeNumber: $inodeNumber, fileSize: $fileSize)';
 }
 
 class SquashfsBasicSymlinkInode extends SquashfsInode {
@@ -68,7 +73,8 @@ class SquashfsBasicSymlinkInode extends SquashfsInode {
             inodeNumber: inodeNumber);
 
   @override
-  String toString() => 'SquashfsBasicSymlinkInode(targetPath: $targetPath)';
+  String toString() =>
+      'SquashfsBasicSymlinkInode(inodeNumber: $inodeNumber, targetPath: $targetPath)';
 }
 
 class SquashfsDirectoryEntry {
@@ -205,7 +211,8 @@ class SquashfsFile {
               uidIndex: uidIndex,
               gidIndex: gidIndex,
               modifiedTime: modifiedTime,
-              inodeNumber: inodeNumber));
+              inodeNumber: inodeNumber,
+              parentInodeNumber: parentInodeNumber));
           break;
         case 2: // Basic File
           var blocksStart = buffer.getUint32(offset + 0, _endian);
